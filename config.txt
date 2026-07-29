@@ -1,0 +1,22 @@
+# A-Maze-ing default configuration file.
+# One KEY=VALUE pair per line. Lines starting with '#' are comments.
+
+# --- Mandatory keys ---
+WIDTH=50
+HEIGHT=50
+ENTRY=0,0
+EXIT=9,9
+OUTPUT_FILE=maze.txt
+PERFECT=False
+
+# --- Optional keys ---
+# SEED makes generation reproducible (any integer).
+SEED=42
+# ALGORITHM: backtracker (default).
+ALGORITHM=backtracker
+# BRAID: fraction (0.0-1.0) of extra walls to remove when PERFECT=False.
+# BRAID=0.15
+# PATTERN: draw the hidden "42" pattern (True/False).
+PATTERN=True
+# DISPLAY: terminal (ASCII rendering).
+DISPLAY=terminal
