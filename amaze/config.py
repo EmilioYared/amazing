@@ -10,6 +10,13 @@ from typing import Optional
 
 _MANDATORY = ("WIDTH", "HEIGHT", "ENTRY", "EXIT", "OUTPUT_FILE", "PERFECT")
 
+#: Upper bound on ``WIDTH * HEIGHT``. The grid is one byte per cell, so an
+#: unbounded size makes ``Maze.__init__`` raise ``MemoryError`` (or
+#: ``OverflowError`` for absurd values) instead of reporting a clean error.
+#: A 1000x1000 maze already takes several seconds to generate and renders
+#: to a 2001x2001 character grid, so this is a generous ceiling.
+_MAX_CELLS = 1_000_000
+
 
 @dataclass
 class Config:
@@ -146,6 +153,11 @@ def load_config(path: str) -> Config:
 
     width = _parse_positive_int("WIDTH", pairs["WIDTH"])
     height = _parse_positive_int("HEIGHT", pairs["HEIGHT"])
+    if width * height > _MAX_CELLS:
+        raise ConfigError(
+            f"WIDTH x HEIGHT must be at most {_MAX_CELLS} cells, got "
+            f"{width * height} ({width}x{height})"
+        )
     entry = _parse_point("ENTRY", pairs["ENTRY"])
     exit_ = _parse_point("EXIT", pairs["EXIT"])
     output_file = pairs["OUTPUT_FILE"]

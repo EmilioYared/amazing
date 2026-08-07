@@ -457,7 +457,7 @@ Colour scheme:
 
 | Kind      | Colour            | ANSI bg |
 |-----------|-------------------|---------|
-| wall      | cyclable palette  | `47/43/42/46/44/45/41` |
+| wall      | cyclable palette  | `47/43/42/44/107/103/102/104` |
 | entry     | magenta           | `45`    |
 | exit      | red               | `41`    |
 | path      | cyan              | `46`    |
@@ -465,6 +465,13 @@ Colour scheme:
 
 The `wall_color` index is what the menu's **"Rotate maze colors"** advances;
 `to_string` just takes it modulo the palette length.
+
+The wall palette is restricted to the **white / yellow / green / blue** hues
+and their bright variants. Magenta, red, cyan and grey are reserved for the
+four markers, so no rotation can ever paint a wall the same colour as the
+entry, exit, path or "42" — nor a bright shade close enough to be confused
+with one. Black (`40`) is excluded too, since it would disappear against a
+dark terminal.
 
 ---
 

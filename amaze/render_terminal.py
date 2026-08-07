@@ -29,7 +29,21 @@ PATH = 4
 PATTERN = 5
 
 #: ANSI background colours the "Rotate maze colors" action cycles through.
-WALL_PALETTE: List[str] = ["47", "43", "42", "46", "44", "45", "41"]
+#: Every hue reserved by :data:`_MARKER_BG` is excluded -- magenta (entry),
+#: red (exit), cyan (path) and grey (the "42") -- and so are their bright
+#: variants, so a wall is never painted a marker's colour nor a shade close
+#: enough to be mistaken for one. Black (40) is left out as well: it would
+#: vanish against a dark terminal background.
+WALL_PALETTE: List[str] = [
+    "47",   # white
+    "43",   # yellow
+    "42",   # green
+    "44",   # blue
+    "107",  # bright white
+    "103",  # bright yellow
+    "102",  # bright green
+    "104",  # bright blue
+]
 
 #: Colour-mode block sizes (in terminal characters). A terminal character is
 #: about twice as tall as it is wide, so a wall 2 columns wide looks as thick

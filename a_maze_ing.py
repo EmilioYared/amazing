@@ -238,6 +238,12 @@ def main(argv: List[str]) -> int:
     except (ValueError, DisconnectedMazeError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 1
+    except (MemoryError, OverflowError):
+        # Backstop: amaze.config caps the cell count, but a caller that
+        # builds a Config directly can still ask for more than fits.
+        print("error: maze too large to allocate (%dx%d)"
+              % (cfg.width, cfg.height), file=sys.stderr)
+        return 1
 
     if not _write(cfg, maze, moves):
         return 1

@@ -62,6 +62,50 @@ def test_optional_defaults(tmp_path: Path) -> None:
     assert cfg.display == "terminal"
 
 
+def test_duplicate_key_last_wins(tmp_path: Path) -> None:
+    """A repeated key takes its last value rather than erroring."""
+    text = (
+        "WIDTH=9\nWIDTH=20\nWIDTH=12\nHEIGHT=7\n"
+        "ENTRY=0,0\nEXIT=8,6\nOUTPUT_FILE=m.txt\nPERFECT=True\n"
+    )
+    assert load_config(_write(tmp_path, text)).width == 12
+
+
+def test_duplicate_key_last_value_is_validated(tmp_path: Path) -> None:
+    """A valid key followed by an invalid repeat still raises."""
+    text = (
+        "WIDTH=9\nWIDTH=abc\nHEIGHT=7\n"
+        "ENTRY=0,0\nEXIT=8,6\nOUTPUT_FILE=m.txt\nPERFECT=True\n"
+    )
+    with pytest.raises(ConfigError):
+        load_config(_write(tmp_path, text))
+
+
+@pytest.mark.parametrize(
+    "width,height",
+    [(1000000, 1000000), (10000000000000000000000, 7), (2000, 2000)],
+)
+def test_oversized_maze_raises_not_crashes(
+    tmp_path: Path, width: int, height: int
+) -> None:
+    """A huge WIDTH/HEIGHT is a ConfigError, never MemoryError."""
+    text = (
+        f"WIDTH={width}\nHEIGHT={height}\n"
+        "ENTRY=0,0\nEXIT=1,1\nOUTPUT_FILE=m.txt\nPERFECT=True\n"
+    )
+    with pytest.raises(ConfigError, match="at most"):
+        load_config(_write(tmp_path, text))
+
+
+def test_largest_allowed_maze_is_accepted(tmp_path: Path) -> None:
+    """The cell cap itself is inclusive."""
+    text = (
+        "WIDTH=1000\nHEIGHT=1000\n"
+        "ENTRY=0,0\nEXIT=999,999\nOUTPUT_FILE=m.txt\nPERFECT=True\n"
+    )
+    assert load_config(_write(tmp_path, text)).width == 1000
+
+
 def test_comments_and_blank_lines_ignored(tmp_path: Path) -> None:
     """Blank lines and ``#`` comments do not affect parsing."""
     text = (

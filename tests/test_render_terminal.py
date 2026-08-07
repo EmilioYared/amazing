@@ -9,6 +9,8 @@ from amaze.render_terminal import (
     PATH,
     PATTERN,
     WALL,
+    WALL_PALETTE,
+    _MARKER_BG,
     build_grid,
     to_string,
 )
@@ -90,3 +92,31 @@ def test_to_string_colour_has_escape_codes() -> None:
     out = to_string(build_grid(_corridor(3)), color=True)
     assert "\x1b[" in out
     assert "\x1b[0m" in out
+
+
+def test_wall_palette_shares_no_colour_with_a_marker() -> None:
+    """No cyclable wall colour equals an entry/exit/path/'42' colour."""
+    assert not set(WALL_PALETTE) & set(_MARKER_BG.values())
+
+
+def test_wall_palette_shares_no_hue_with_a_marker() -> None:
+    """Bright variants of a marker hue are excluded too.
+
+    In both the 40-47 and 100-107 ranges the final digit is the hue, so
+    e.g. bright red (101) is rejected alongside red (41).
+    """
+    reserved = {code[-1] for code in _MARKER_BG.values()}
+    assert not {code[-1] for code in WALL_PALETTE} & reserved
+
+
+def test_cycling_wall_colours_never_emits_a_marker_colour() -> None:
+    """Rotating past the end of the palette stays collision-free.
+
+    The corridor has no entry, exit, path or fully-walled cell, so every
+    coloured block it renders is a wall.
+    """
+    grid = build_grid(_corridor(4))
+    for idx in range(len(WALL_PALETTE) * 2 + 1):
+        out = to_string(grid, wall_color=idx, color=True)
+        for code in _MARKER_BG.values():
+            assert "\x1b[%sm" % code not in out
