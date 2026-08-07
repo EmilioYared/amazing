@@ -1,19 +1,13 @@
 #!/usr/bin/env python3
-"""A-Maze-ing — command-line maze generator.
+"""A-Maze-ing -- command-line maze generator.
 
 Usage::
 
     python3 a_maze_ing.py config.txt
 
-Reads a configuration file, generates a maze (optionally a perfect maze
-with a single entry->exit path) that hides a "42" pattern, writes it to
-the configured output file using the hex wall encoding, renders it in the
-terminal as coloured blocks, and offers a small interactive menu:
-
-    1. Re-generate a new maze
-    2. Show/Hide path from entry to exit
-    3. Rotate maze colors
-    4. Quit
+Reads a configuration file, generates a maze hiding a "42", writes it to
+the configured output file, renders it in the terminal and offers an
+interactive menu.
 """
 
 from __future__ import annotations
@@ -43,7 +37,7 @@ from mazegen.solver import solve  # noqa: E402
 
 _Cell = Tuple[int, int]
 
-#: Colour swatches for the on-screen legend: (label, ANSI background code).
+#: Colour swatches for the on-screen legend: (label, ANSI background).
 _LEGEND = [
     ("entry", "45"),
     ("exit", "41"),
@@ -77,11 +71,17 @@ def _enable_windows_ansi() -> None:
 
 
 def _compute_blocked(cfg: Config, verbose: bool = True) -> Set[_Cell]:
-    """Return the '42' blocked cells, or an empty set with a message.
+    """Return the '42' cells, or an empty set with a message.
 
-    The pattern is omitted (and a note printed to stderr) when it is
-    disabled, when the maze is too small to hold it, or when it would
-    collide with the entry or exit cell.
+    The pattern is omitted when disabled, when the maze is too small, or
+    when it would collide with the entry or exit.
+
+    Args:
+        cfg: The maze configuration.
+        verbose: Whether to print the reason to stderr.
+
+    Returns:
+        The cells to wall off, possibly empty.
     """
     if not cfg.pattern:
         return set()
@@ -111,11 +111,25 @@ def _generate(
     cfg: Config, seed: Optional[int], blocked: Set[_Cell],
     verbose: bool = True,
 ) -> Maze:
-    """Generate a maze, dropping the pattern if it disconnects the maze."""
+    """Generate a maze, dropping the pattern if it disconnects the maze.
+
+    Args:
+        cfg: The maze configuration.
+        seed: Seed for this generation.
+        blocked: Cells to wall off.
+        verbose: Whether to print the retry reason to stderr.
+
+    Returns:
+        The generated maze.
+
+    Raises:
+        DisconnectedMazeError: If generation fails with no pattern.
+    """
     try:
         gen = MazeGenerator(
             cfg.width, cfg.height, cfg.entry, cfg.exit,
-            seed=seed, perfect=cfg.perfect, braid=cfg.braid, blocked=blocked,
+            seed=seed, perfect=cfg.perfect, braid=cfg.braid,
+            blocked=blocked,
         )
         return gen.generate()
     except DisconnectedMazeError:
@@ -137,7 +151,16 @@ def _generate(
 def _build_maze(
     cfg: Config, seed: Optional[int], verbose: bool = True,
 ) -> Tuple[Maze, List[str]]:
-    """Generate a maze and its shortest solution for ``cfg`` and ``seed``."""
+    """Generate a maze and its shortest solution.
+
+    Args:
+        cfg: The maze configuration.
+        seed: Seed for this generation.
+        verbose: Whether to print warnings to stderr.
+
+    Returns:
+        The maze and its solution moves.
+    """
     blocked = _compute_blocked(cfg, verbose=verbose)
     maze = _generate(cfg, seed, blocked, verbose=verbose)
     moves = solve(maze, cfg.entry, cfg.exit)
@@ -145,10 +168,18 @@ def _build_maze(
 
 
 def _write(cfg: Config, maze: Maze, moves: List[str]) -> bool:
-    """Write ``maze`` to ``cfg.output_file``; report failure and continue.
+    """Write ``maze`` to ``cfg.output_file``, reporting any failure.
 
-    Called for the first maze and again after every regeneration, so the
-    output file always matches what is on screen.
+    Called for the first maze and after every regeneration, so the file
+    always matches what is on screen.
+
+    Args:
+        cfg: The maze configuration.
+        maze: The maze to write.
+        moves: Solution moves.
+
+    Returns:
+        Whether the file was written.
     """
     try:
         write_output(cfg.output_file, maze, cfg.entry, cfg.exit, moves)
@@ -160,7 +191,14 @@ def _write(cfg: Config, maze: Maze, moves: List[str]) -> bool:
 
 
 def _legend(color: bool) -> str:
-    """Return a one-line colour key for the markers."""
+    """Return a one-line colour key for the markers.
+
+    Args:
+        color: Whether colour output is available.
+
+    Returns:
+        The legend line.
+    """
     if not color:
         return "S entry   E exit   * path   @ '42'"
     parts = [
@@ -173,7 +211,15 @@ def _display(
     maze: Maze, cfg: Config, moves: List[str],
     show_path: bool, color_idx: int,
 ) -> None:
-    """Render the maze to stdout with the current view options."""
+    """Render the maze to stdout with the current view options.
+
+    Args:
+        maze: The maze to draw.
+        cfg: The maze configuration.
+        moves: Solution moves.
+        show_path: Whether to draw the path.
+        color_idx: Current wall-colour index.
+    """
     color = sys.stdout.isatty()
     grid = build_grid(
         maze, entry=cfg.entry, exit=cfg.exit,
@@ -189,7 +235,14 @@ def _display(
 def _interactive(
     cfg: Config, seed: Optional[int], maze: Maze, moves: List[str],
 ) -> None:
-    """Run the render/menu loop; render once and exit if not a TTY."""
+    """Run the render/menu loop, rendering once if stdin is not a TTY.
+
+    Args:
+        cfg: The maze configuration.
+        seed: The configured seed, offset on each regeneration.
+        maze: The maze to display first.
+        moves: Its solution moves.
+    """
     show_path = True
     color_idx = 0
     regen = 0
@@ -223,7 +276,14 @@ def _interactive(
 
 
 def main(argv: List[str]) -> int:
-    """Program entry point. Returns a process exit code."""
+    """Run the program.
+
+    Args:
+        argv: Command-line arguments, ``argv[1]`` being the config file.
+
+    Returns:
+        The process exit code.
+    """
     if len(argv) != 2:
         print("usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
         return 1
@@ -239,8 +299,6 @@ def main(argv: List[str]) -> int:
         print("error: %s" % exc, file=sys.stderr)
         return 1
     except (MemoryError, OverflowError):
-        # Backstop: amaze.config caps the cell count, but a caller that
-        # builds a Config directly can still ask for more than fits.
         print("error: maze too large to allocate (%dx%d)"
               % (cfg.width, cfg.height), file=sys.stderr)
         return 1

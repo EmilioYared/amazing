@@ -1,18 +1,11 @@
-"""Core maze grid data model and wall geometry.
+"""Maze grid model and wall geometry.
 
-This module is the shared foundation of the ``mazegen`` package. It
-defines the wall-bit convention, the :class:`Maze` container, and the
-geometric helpers (wall coherence via :meth:`Maze.carve` and the
-"no 3x3 open area" checks) that the generator and validators rely on.
+Wall encoding, one hex digit per cell::
 
-Wall encoding (one hex digit per cell in the output file)::
+    bit 0 (1) North    bit 1 (2) East
+    bit 2 (4) South    bit 3 (8) West
 
-    bit 0 (value 1)  -> North
-    bit 1 (value 2)  -> East
-    bit 2 (value 4)  -> South
-    bit 3 (value 8)  -> West
-
-A set bit means the wall is *closed*; a cleared bit means it is *open*.
+A set bit means the wall is closed, a cleared bit that it is open.
 """
 
 from __future__ import annotations
@@ -24,12 +17,12 @@ N: int = 1
 E: int = 2
 S: int = 4
 W: int = 8
-ALL: int = N | E | S | W  # 15 -> a fully walled (closed) cell
+ALL: int = N | E | S | W  # 15 -> a fully walled cell
 
-#: Opposite direction of each wall (shared edge between two cells).
+#: Opposite direction of each wall (the shared edge between two cells).
 OPPOSITE: Dict[int, int] = {N: S, S: N, E: W, W: E}
 
-#: Grid displacement ``(dx, dy)`` for each direction (y grows downward).
+#: Grid displacement ``(dx, dy)`` per direction (y grows downward).
 DELTA: Dict[int, Tuple[int, int]] = {
     N: (0, -1),
     S: (0, 1),
@@ -37,34 +30,36 @@ DELTA: Dict[int, Tuple[int, int]] = {
     W: (-1, 0),
 }
 
-#: Letter used to encode a move in each direction (output / solution).
+#: Move letter for each direction.
 LETTER: Dict[int, str] = {N: "N", E: "E", S: "S", W: "W"}
 
-#: Iteration order used when walking a cell's four neighbours.
+#: Iteration order when walking a cell's four neighbours.
 _DIRECTIONS: Tuple[int, ...] = (N, E, S, W)
 
-#: Canonical edge for a cell/direction points at the top/left owner and
-#: uses only ``E`` (horizontal) or ``S`` (vertical) so every physical
-#: edge has a single representation.
+#: An edge named by its top/left cell using only ``E`` or ``S``, so every
+#: physical wall has exactly one representation.
 _Edge = Tuple[int, int, int]
 
 
 class Maze:
     """A rectangular grid of cells, each holding a 4-bit wall mask.
 
-    Every cell starts fully walled (``ALL``). Passages are opened with
-    :meth:`carve`, which clears the shared bit on *both* neighbours so
-    the two sides of a wall can never disagree (coherence by
-    construction).
+    Every cell starts fully walled. Passages are opened with
+    :meth:`carve`, which clears the shared bit on both neighbours so the
+    two sides of a wall can never disagree.
 
     Args:
-        width: Number of cells per row (must be >= 1).
-        height: Number of rows (must be >= 1).
+        width: Number of cells per row.
+        height: Number of rows.
+
+    Raises:
+        ValueError: If a dimension is below 1.
     """
 
     __slots__ = ("width", "height", "_cells")
 
     def __init__(self, width: int, height: int) -> None:
+        """Create a grid of ``width`` x ``height`` fully walled cells."""
         if width < 1 or height < 1:
             raise ValueError("maze dimensions must be >= 1")
         self.width: int = width
@@ -77,7 +72,7 @@ class Maze:
         return y * self.width + x
 
     def in_bounds(self, x: int, y: int) -> bool:
-        """Return ``True`` if ``(x, y)`` lies inside the grid."""
+        """Return whether ``(x, y)`` lies inside the grid."""
         return 0 <= x < self.width and 0 <= y < self.height
 
     # --- Wall queries -------------------------------------------------
@@ -86,11 +81,11 @@ class Maze:
         return self._cells[self._idx(x, y)]
 
     def has_wall(self, x: int, y: int, direction: int) -> bool:
-        """Return ``True`` if the wall on ``direction`` is closed."""
+        """Return whether the wall on ``direction`` is closed."""
         return bool(self._cells[self._idx(x, y)] & direction)
 
     def is_open(self, x: int, y: int, direction: int) -> bool:
-        """Return ``True`` if the wall on ``direction`` is open."""
+        """Return whether the wall on ``direction`` is open."""
         return not self._cells[self._idx(x, y)] & direction
 
     # --- Wall mutation ------------------------------------------------
@@ -102,8 +97,13 @@ class Maze:
         """Open the wall between ``(x, y)`` and its ``direction`` neighbour.
 
         Clears the matching bit on both cells so the shared edge stays
-        coherent. Carving toward an out-of-bounds neighbour (i.e. the
-        outer border) is refused.
+        coherent. Carving toward the outer border is refused, which is
+        what keeps the border closed.
+
+        Args:
+            x: Cell column.
+            y: Cell row.
+            direction: One of :data:`N`, :data:`E`, :data:`S`, :data:`W`.
 
         Raises:
             ValueError: If the neighbour lies outside the grid.
@@ -125,15 +125,21 @@ class Maze:
                 yield nx, ny, direction
 
     # --- 3x3 open-area rule -------------------------------------------
-    # A "3x3 open area" is a 3x3 rectangle of cells whose 12 internal
-    # passages (6 horizontal + 6 vertical) are all open. Such blocks are
-    # forbidden; 2x3 and 3x2 fully-open rectangles are allowed.
+    # A "3x3 open area" is a 3x3 block of cells whose 12 internal
+    # passages are all open. 2x3 and 3x2 open rectangles are allowed.
     def _edge_open(self, ex: int, ey: int, edir: int,
                    override: Optional[_Edge]) -> bool:
         """Return whether canonical edge ``(ex, ey, edir)`` is open.
 
-        ``override`` lets a single edge be treated as open regardless of
-        its stored state, used to test a hypothetical carve.
+        Args:
+            ex: Owner cell column.
+            ey: Owner cell row.
+            edir: Either :data:`E` or :data:`S`.
+            override: An edge to treat as open regardless of its stored
+                state, used to test a hypothetical carve.
+
+        Returns:
+            Whether the edge counts as open.
         """
         if override is not None and override == (ex, ey, edir):
             return True
@@ -141,7 +147,7 @@ class Maze:
 
     def _block_open(self, cx: int, cy: int,
                     override: Optional[_Edge] = None) -> bool:
-        """Return ``True`` if the 3x3 block at ``(cx, cy)`` is fully open."""
+        """Return whether the 3x3 block at ``(cx, cy)`` is fully open."""
         for yy in range(cy, cy + 3):
             for xx in range(cx, cx + 2):
                 if not self._edge_open(xx, yy, E, override):
@@ -153,7 +159,7 @@ class Maze:
         return True
 
     def has_any_3x3_open(self) -> bool:
-        """Return ``True`` if any 3x3 fully-open block exists."""
+        """Return whether any 3x3 fully-open block exists."""
         for cy in range(self.height - 2):
             for cx in range(self.width - 2):
                 if self._block_open(cx, cy):
@@ -162,7 +168,16 @@ class Maze:
 
     def _canonical_edge(self, x: int, y: int,
                         direction: int) -> Optional[_Edge]:
-        """Map ``(x, y, direction)`` to its top/left ``E``/``S`` owner."""
+        """Return the top/left ``E``/``S`` name of an edge.
+
+        Args:
+            x: Cell column.
+            y: Cell row.
+            direction: Any of the four directions.
+
+        Returns:
+            The canonical edge, or ``None`` for a border wall.
+        """
         dx, dy = DELTA[direction]
         nx, ny = x + dx, y + dy
         if not self.in_bounds(nx, ny):
@@ -177,10 +192,18 @@ class Maze:
 
     def would_form_3x3_open(self, x: int, y: int,
                             direction: int) -> bool:
-        """Return ``True`` if opening this wall completes a 3x3 block.
+        """Return whether opening this wall completes a 3x3 open block.
 
-        Only the (few) 3x3 windows that contain the edge are inspected,
-        so the check is constant time.
+        Only the few 3x3 windows containing the edge are inspected, so
+        the check is constant time.
+
+        Args:
+            x: Cell column.
+            y: Cell row.
+            direction: The wall to test.
+
+        Returns:
+            Whether carving here would break the no-3x3 rule.
         """
         edge = self._canonical_edge(x, y, direction)
         if edge is None:
@@ -204,7 +227,7 @@ class Maze:
 
     # --- Convenience --------------------------------------------------
     def to_rows(self) -> Iterator[str]:
-        """Yield one hex string per row (row 0 first)."""
+        """Yield one uppercase hex string per row, top row first."""
         for y in range(self.height):
             start = y * self.width
             row = self._cells[start:start + self.width]

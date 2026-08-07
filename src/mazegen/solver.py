@@ -1,9 +1,8 @@
 """Shortest-path maze solver.
 
-Breadth-first search over the open-passage graph of a :class:`Maze`.
-Two public helpers share the same search: :func:`solve` returns the
-shortest route as move letters (``'N'``/``'E'``/``'S'``/``'W'``) while
-:func:`path_cells` returns the same route as ``(x, y)`` cells.
+Breadth-first search over the open passages of a :class:`Maze`.
+:func:`solve` returns the route as move letters, :func:`path_cells` the
+same route as cells.
 """
 
 from __future__ import annotations
@@ -13,8 +12,7 @@ from typing import Optional
 
 from mazegen.grid import LETTER, Maze
 
-#: One step of a reconstructed path: a cell and the direction moved to
-#: reach it (``None`` for the entry cell).
+#: One path step: a cell and the direction taken to reach it.
 _Step = tuple[tuple[int, int], Optional[int]]
 
 
@@ -40,15 +38,20 @@ def _bfs_path(
     entry: tuple[int, int],
     exit: tuple[int, int],
 ) -> list[_Step]:
-    """Return the shortest ``entry``->``exit`` path as steps.
+    """Return the shortest ``entry`` -> ``exit`` path as steps.
 
-    Each element pairs a cell with the direction moved to reach it; the
-    first element is ``(entry, None)``. Breadth-first search guarantees
-    the returned path is a shortest one.
+    Args:
+        maze: The maze to search.
+        entry: The ``(x, y)`` start cell.
+        exit: The ``(x, y)`` goal cell.
+
+    Returns:
+        Steps from ``entry`` to ``exit``, the first being
+        ``(entry, None)``.
 
     Raises:
-        ValueError: If ``entry`` or ``exit`` is out of bounds, or if
-            ``exit`` cannot be reached from ``entry``.
+        ValueError: If a cell is out of bounds or ``exit`` is
+            unreachable.
     """
     if not maze.in_bounds(*entry):
         raise ValueError(f"entry {entry} is out of bounds")
@@ -79,14 +82,19 @@ def solve(
     entry: tuple[int, int],
     exit: tuple[int, int],
 ) -> list[str]:
-    """Return the shortest route from ``entry`` to ``exit`` as letters.
+    """Return the shortest route as ``N``/``E``/``S``/``W`` letters.
 
-    The result is a list of move letters (``'N'``/``'E'``/``'S'``/
-    ``'W'``); an empty list means ``entry == exit``.
+    Args:
+        maze: The maze to solve.
+        entry: The ``(x, y)`` start cell.
+        exit: The ``(x, y)`` goal cell.
+
+    Returns:
+        The move letters; empty when ``entry == exit``.
 
     Raises:
-        ValueError: If ``entry``/``exit`` is out of bounds or ``exit``
-            is unreachable.
+        ValueError: If a cell is out of bounds or ``exit`` is
+            unreachable.
     """
     return [
         LETTER[direction]
@@ -102,11 +110,16 @@ def path_cells(
 ) -> list[tuple[int, int]]:
     """Return the shortest route as ``(x, y)`` cells, inclusive.
 
-    The list runs from ``entry`` to ``exit``; ``entry == exit`` yields
-    ``[entry]``.
+    Args:
+        maze: The maze to solve.
+        entry: The ``(x, y)`` start cell.
+        exit: The ``(x, y)`` goal cell.
+
+    Returns:
+        The cells from ``entry`` to ``exit``.
 
     Raises:
-        ValueError: If ``entry``/``exit`` is out of bounds or ``exit``
-            is unreachable.
+        ValueError: If a cell is out of bounds or ``exit`` is
+            unreachable.
     """
     return [cell for cell, _ in _bfs_path(maze, entry, exit)]

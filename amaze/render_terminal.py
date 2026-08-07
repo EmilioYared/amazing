@@ -1,17 +1,9 @@
-"""Block-style terminal renderer for :class:`mazegen.grid.Maze`.
+"""Block-style terminal renderer for a :class:`mazegen.grid.Maze`.
 
-The maze is drawn as a grid of solid blocks, matching the A-Maze-ing
-reference screenshots: closed walls are coloured blocks, open passages are
-blank, and the entry, exit, solution path and hidden "42" each get their
-own colour.
-
-Rendering is split into two small, pure steps:
-
-* :func:`build_grid` turns a maze into a ``(2*H+1) x (2*W+1)`` grid of
-  *kind* codes (wall, open, entry, exit, path, pattern). Odd rows/columns
-  are cell interiors, even rows/columns are the walls between them.
-* :func:`to_string` paints that grid into a printable string, either with
-  ANSI colours (on a terminal) or with plain ASCII characters (elsewhere).
+Rendering is two pure steps: :func:`build_grid` turns a maze into a
+``(2*H+1) x (2*W+1)`` grid of kind codes (odd indices are cell
+interiors, even indices the walls between them), and :func:`to_string`
+paints that grid with ANSI colours or plain ASCII.
 """
 
 from __future__ import annotations
@@ -28,12 +20,18 @@ EXIT = 3
 PATH = 4
 PATTERN = 5
 
-#: ANSI background colours the "Rotate maze colors" action cycles through.
-#: Every hue reserved by :data:`_MARKER_BG` is excluded -- magenta (entry),
-#: red (exit), cyan (path) and grey (the "42") -- and so are their bright
-#: variants, so a wall is never painted a marker's colour nor a shade close
-#: enough to be mistaken for one. Black (40) is left out as well: it would
-#: vanish against a dark terminal background.
+#: Fixed background colour per marker (ANSI SGR codes).
+_MARKER_BG: Dict[int, str] = {
+    ENTRY: "45",     # magenta
+    EXIT: "41",      # red
+    PATH: "46",      # cyan
+    PATTERN: "100",  # grey -> the hidden "42"
+}
+
+#: Background colours the "Rotate maze colors" action cycles through.
+#: Every marker hue above is excluded, along with its bright variant, so
+#: a wall can never take a marker's colour or a shade close to it. Black
+#: (40) is left out as it would vanish on a dark terminal.
 WALL_PALETTE: List[str] = [
     "47",   # white
     "43",   # yellow
@@ -45,23 +43,13 @@ WALL_PALETTE: List[str] = [
     "104",  # bright blue
 ]
 
-#: Colour-mode block sizes (in terminal characters). A terminal character is
-#: about twice as tall as it is wide, so a wall 2 columns wide looks as thick
-#: as a wall 1 row tall -- vertical and horizontal walls therefore render
-#: with the SAME apparent thickness, and both stay thinner than a cell (which
-#: matches the reference screenshots in the PDF).
-_CELL_W = 4   # a cell interior is 4 columns wide
-_CELL_H = 2   # a cell interior is 2 rows tall
-_WALL_W = 2   # a wall/corner column is 2 columns wide
-_WALL_H = 1   # a wall/corner row is 1 row tall
-
-#: Fixed background colour for each non-wall marker (ANSI SGR codes).
-_MARKER_BG: Dict[int, str] = {
-    ENTRY: "45",     # magenta
-    EXIT: "41",      # red
-    PATH: "46",      # cyan
-    PATTERN: "100",  # bright black (grey) -> the hidden "42"
-}
+#: Colour-mode block sizes in terminal characters. A character is about
+#: twice as tall as it is wide, so a 2-column wall looks as thick as a
+#: 1-row wall and both stay thinner than a cell.
+_CELL_W = 4
+_CELL_H = 2
+_WALL_W = 2
+_WALL_H = 1
 
 #: Plain characters used when colour output is unavailable.
 _KIND_CHAR: Dict[int, str] = {
@@ -93,16 +81,14 @@ def build_grid(
 
     Args:
         maze: The maze to draw.
-        entry: Optional ``(x, y)`` start cell, marked :data:`ENTRY`.
-        exit: Optional ``(x, y)`` goal cell, marked :data:`EXIT`.
-        path: Optional solution as ``N``/``E``/``S``/``W`` letters, walked
-            from ``entry`` to mark the cells it crosses.
-        show_path: When false, ``path`` is not drawn.
+        entry: Optional ``(x, y)`` start cell.
+        exit: Optional ``(x, y)`` goal cell.
+        path: Optional solution letters, walked from ``entry``.
+        show_path: Whether to draw ``path``.
 
     Returns:
-        A list of rows, each a list of kind codes. Cell ``(x, y)`` lives at
-        ``grid[2*y + 1][2*x + 1]``; even indices hold the walls between
-        cells and start closed.
+        Rows of kind codes; cell ``(x, y)`` sits at
+        ``grid[2*y + 1][2*x + 1]``.
     """
     rows = 2 * maze.height + 1
     cols = 2 * maze.width + 1
@@ -124,7 +110,7 @@ def build_grid(
     if show_path and path and entry is not None:
         cells = [entry, *_walk(maze, entry, path)]
         for (px, py), (cx, cy) in zip(cells, cells[1:]):
-            grid[py + cy + 1][px + cx + 1] = PATH   # passage between cells
+            grid[py + cy + 1][px + cx + 1] = PATH   # passage between
             grid[2 * cy + 1][2 * cx + 1] = PATH     # the cell reached
 
     if entry is not None:
@@ -137,8 +123,10 @@ def build_grid(
 def _open_junctions(grid: List[List[int]], rows: int, cols: int) -> None:
     """Open wall corners sitting in the middle of a 2x2 open area.
 
-    Without this a lone wall block would appear inside every allowed
-    2-wide open space; opening the corner keeps such areas clean.
+    Args:
+        grid: The kind grid to edit in place.
+        rows: Number of grid rows.
+        cols: Number of grid columns.
     """
     for jy in range(2, rows - 1, 2):
         for jx in range(2, cols - 1, 2):
@@ -149,11 +137,11 @@ def _open_junctions(grid: List[List[int]], rows: int, cols: int) -> None:
 
 
 def _fill_pattern(maze: Maze, grid: List[List[int]]) -> None:
-    """Paint fully-walled cells (the "42") as a solid coloured shape.
+    """Paint fully-walled cells (the "42") as solid shapes.
 
-    Each blocked cell and the walls it shares with a blocked neighbour are
-    marked :data:`PATTERN` so the digits read as filled blocks rather than
-    isolated dots.
+    Args:
+        maze: The maze whose blocked cells are found.
+        grid: The kind grid to edit in place.
     """
     blocked = {
         (x, y)
@@ -176,7 +164,16 @@ def _fill_pattern(maze: Maze, grid: List[List[int]]) -> None:
 def _walk(
     maze: Maze, entry: Tuple[int, int], path: List[str]
 ) -> List[Tuple[int, int]]:
-    """Return the cells visited by walking ``path`` from ``entry``."""
+    """Return the cells visited by walking ``path`` from ``entry``.
+
+    Args:
+        maze: The maze being walked.
+        entry: The ``(x, y)`` start cell.
+        path: Move letters to follow.
+
+    Returns:
+        The cells reached, stopping at the first invalid move.
+    """
     x, y = entry
     cells: List[Tuple[int, int]] = []
     for move in path:
@@ -194,19 +191,15 @@ def _walk(
 def to_string(
     grid: List[List[int]], *, wall_color: int = 0, color: bool = True
 ) -> str:
-    """Paint a kind grid (from :func:`build_grid`) into a printable string.
+    """Paint a kind grid into a printable string.
 
     Args:
-        grid: The kind grid to render.
-        wall_color: Index into :data:`WALL_PALETTE` for the wall colour;
-            increment it to cycle colours.
-        color: When true, emit ANSI colour blocks sized so vertical and
-            horizontal walls look equally thick and both thinner than a cell
-            (see the ``_CELL_*`` / ``_WALL_*`` sizes); when false, emit one
-            plain ASCII character per grid cell.
+        grid: The kind grid from :func:`build_grid`.
+        wall_color: Index into :data:`WALL_PALETTE`; increment to cycle.
+        color: Whether to emit ANSI colour blocks instead of ASCII.
 
     Returns:
-        The rendered maze, rows joined by newlines with no trailing one.
+        The rendered maze, rows joined by newlines.
     """
     wall_bg = WALL_PALETTE[wall_color % len(WALL_PALETTE)]
     lines: List[str] = []
@@ -214,8 +207,6 @@ def to_string(
         if not color:
             lines.append("".join(_KIND_CHAR[kind] for kind in row))
             continue
-        # Odd grid indices are cell interiors (large); even indices are the
-        # walls between them (thin, but sized so both look equally thick).
         line = "".join(
             _block(kind, _CELL_W if c % 2 else _WALL_W, wall_bg)
             for c, kind in enumerate(row)
@@ -225,7 +216,16 @@ def to_string(
 
 
 def _block(kind: int, width: int, wall_bg: str) -> str:
-    """Return one coloured block ``width`` columns wide for ``kind``."""
+    """Return one coloured block for ``kind``.
+
+    Args:
+        kind: The cell kind to paint.
+        width: Block width in terminal columns.
+        wall_bg: ANSI background code for walls.
+
+    Returns:
+        The escape-wrapped block, or plain spaces when open.
+    """
     if kind == OPEN:
         return " " * width
     bg = wall_bg if kind == WALL else _MARKER_BG[kind]

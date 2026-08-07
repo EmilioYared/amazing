@@ -1,8 +1,8 @@
 """Parse and validate the A-Maze-ing configuration file.
 
-The configuration file is a simple ``KEY=VALUE`` text format (see
-``config.txt``). Blank lines and lines starting with ``#`` are ignored.
-This module is standalone and does not depend on ``mazegen``.
+The file is a ``KEY=VALUE`` text format (see ``config.txt``). Blank lines
+and ``#`` comments are ignored, unknown keys are skipped, and a repeated
+key takes its last value. This module does not depend on ``mazegen``.
 """
 
 from dataclasses import dataclass
@@ -10,11 +10,8 @@ from typing import Optional
 
 _MANDATORY = ("WIDTH", "HEIGHT", "ENTRY", "EXIT", "OUTPUT_FILE", "PERFECT")
 
-#: Upper bound on ``WIDTH * HEIGHT``. The grid is one byte per cell, so an
-#: unbounded size makes ``Maze.__init__`` raise ``MemoryError`` (or
-#: ``OverflowError`` for absurd values) instead of reporting a clean error.
-#: A 1000x1000 maze already takes several seconds to generate and renders
-#: to a 2001x2001 character grid, so this is a generous ceiling.
+#: Upper bound on ``WIDTH * HEIGHT``. Without it a huge size makes the
+#: grid allocation raise ``MemoryError`` instead of a clear error.
 _MAX_CELLS = 1_000_000
 
 
@@ -22,7 +19,18 @@ _MAX_CELLS = 1_000_000
 class Config:
     """Validated maze configuration.
 
-    Groups every setting needed to generate and render a maze.
+    Attributes:
+        width: Maze width in cells.
+        height: Maze height in cells.
+        entry: The ``(x, y)`` entry cell.
+        exit: The ``(x, y)`` exit cell.
+        output_file: Path the maze is written to.
+        perfect: Whether the maze has exactly one entry->exit path.
+        seed: Optional seed for reproducible generation.
+        algorithm: Generation algorithm name.
+        braid: Fraction of extra walls opened when not perfect.
+        pattern: Whether to draw the hidden "42".
+        display: Rendering mode.
     """
 
     width: int
@@ -43,7 +51,18 @@ class ConfigError(Exception):
 
 
 def _parse_bool(key: str, value: str) -> bool:
-    """Parse ``true``/``false`` (case-insensitive) into a bool."""
+    """Parse ``true``/``false``, case-insensitively.
+
+    Args:
+        key: Key name, used in the error message.
+        value: Raw text to parse.
+
+    Returns:
+        The parsed boolean.
+
+    Raises:
+        ConfigError: If the value is not a boolean.
+    """
     lowered = value.strip().lower()
     if lowered == "true":
         return True
@@ -55,7 +74,18 @@ def _parse_bool(key: str, value: str) -> bool:
 
 
 def _parse_positive_int(key: str, value: str) -> int:
-    """Parse a strictly positive integer."""
+    """Parse a strictly positive integer.
+
+    Args:
+        key: Key name, used in the error message.
+        value: Raw text to parse.
+
+    Returns:
+        The parsed integer.
+
+    Raises:
+        ConfigError: If the value is not an integer above 0.
+    """
     try:
         parsed = int(value.strip())
     except ValueError:
@@ -68,7 +98,18 @@ def _parse_positive_int(key: str, value: str) -> int:
 
 
 def _parse_point(key: str, value: str) -> tuple[int, int]:
-    """Parse an ``x,y`` pair into a ``tuple[int, int]``."""
+    """Parse an ``x,y`` pair.
+
+    Args:
+        key: Key name, used in the error message.
+        value: Raw text to parse.
+
+    Returns:
+        The parsed ``(x, y)`` tuple.
+
+    Raises:
+        ConfigError: If the value is not two integers.
+    """
     parts = value.split(",")
     if len(parts) != 2:
         raise ConfigError(
@@ -85,7 +126,17 @@ def _parse_point(key: str, value: str) -> tuple[int, int]:
 
 
 def _parse_seed(value: str) -> Optional[int]:
-    """Parse an optional integer seed (empty string means unset)."""
+    """Parse an optional integer seed.
+
+    Args:
+        value: Raw text; empty means unset.
+
+    Returns:
+        The seed, or ``None`` when unset.
+
+    Raises:
+        ConfigError: If a non-empty value is not an integer.
+    """
     stripped = value.strip()
     if stripped == "":
         return None
@@ -98,7 +149,17 @@ def _parse_seed(value: str) -> Optional[int]:
 
 
 def _parse_braid(value: str) -> float:
-    """Parse a braid fraction in the closed interval [0.0, 1.0]."""
+    """Parse a braid fraction in ``[0.0, 1.0]``.
+
+    Args:
+        value: Raw text to parse.
+
+    Returns:
+        The parsed fraction.
+
+    Raises:
+        ConfigError: If the value is not a number in range.
+    """
     try:
         parsed = float(value.strip())
     except ValueError:
@@ -112,11 +173,39 @@ def _parse_braid(value: str) -> float:
     return parsed
 
 
+def _validate_point(
+    key: str, point: tuple[int, int], width: int, height: int
+) -> None:
+    """Ensure ``point`` lies within the maze bounds.
+
+    Args:
+        key: Key name, used in the error message.
+        point: The ``(x, y)`` cell to check.
+        width: Maze width in cells.
+        height: Maze height in cells.
+
+    Raises:
+        ConfigError: If the point is outside the grid.
+    """
+    x, y = point
+    if not 0 <= x <= width - 1 or not 0 <= y <= height - 1:
+        raise ConfigError(
+            f"{key} {point} is out of bounds for a "
+            f"{width}x{height} maze"
+        )
+
+
 def _read_pairs(path: str) -> dict[str, str]:
     """Read the file into an uppercase key -> value mapping.
 
-    Blank lines and ``#`` comments are skipped. Each remaining line
-    must contain a ``=``; the key is uppercased and matched later.
+    Args:
+        path: Path to the configuration file.
+
+    Returns:
+        The parsed pairs, later keys overriding earlier ones.
+
+    Raises:
+        ConfigError: If the file is missing or a line has no ``=``.
     """
     pairs: dict[str, str] = {}
     try:
@@ -140,8 +229,15 @@ def _read_pairs(path: str) -> dict[str, str]:
 def load_config(path: str) -> Config:
     """Load, parse and validate the configuration at ``path``.
 
-    Raises :class:`ConfigError` on any missing key, malformed value or
-    failed validation. Unknown keys are ignored.
+    Args:
+        path: Path to the configuration file.
+
+    Returns:
+        The validated configuration.
+
+    Raises:
+        ConfigError: On a missing key, malformed value or failed
+            validation.
     """
     pairs = _read_pairs(path)
 
@@ -189,15 +285,3 @@ def load_config(path: str) -> Config:
         pattern=pattern,
         display=display,
     )
-
-
-def _validate_point(
-    key: str, point: tuple[int, int], width: int, height: int
-) -> None:
-    """Ensure ``point`` lies within the maze bounds."""
-    x, y = point
-    if not 0 <= x <= width - 1 or not 0 <= y <= height - 1:
-        raise ConfigError(
-            f"{key} {point} is out of bounds for a "
-            f"{width}x{height} maze"
-        )

@@ -1,11 +1,9 @@
 """Randomized maze generation on top of the shared grid model.
 
-This module builds a :class:`~mazegen.grid.Maze` using an *iterative*
-randomized backtracker (depth-first search with an explicit stack, never
-recursion). It supports a set of fully-closed ``blocked`` cells (the
-"42" pattern) that must stay walled and non-traversable, and an optional
-``braid`` pass that removes extra walls to introduce loops while never
-creating a forbidden 3x3 open area.
+Builds a :class:`~mazegen.grid.Maze` with an iterative randomized
+backtracker (depth-first search with an explicit stack). Supports a set
+of fully-closed ``blocked`` cells (the "42") and an optional braiding
+pass that adds loops without ever creating a 3x3 open area.
 """
 
 from __future__ import annotations
@@ -20,31 +18,25 @@ _Cell = Tuple[int, int]
 
 
 class DisconnectedMazeError(Exception):
-    """Raised when blocked cells split the traversable region.
-
-    The backtracker starts at ``entry`` and can only reach non-blocked
-    cells; if it cannot visit every non-blocked cell the requested maze
-    is impossible.
-    """
+    """Raised when blocked cells split the traversable region."""
 
 
 class MazeGenerator:
     """Generate a maze with a reproducible randomized backtracker.
 
     Args:
-        width: Number of cells per row (>= 1).
-        height: Number of rows (>= 1).
-        entry: ``(x, y)`` start cell (in bounds, not blocked).
-        exit: ``(x, y)`` goal cell (in bounds, not blocked, != entry).
+        width: Number of cells per row.
+        height: Number of rows.
+        entry: ``(x, y)`` start cell.
+        exit: ``(x, y)`` goal cell, different from ``entry``.
         seed: Optional seed for reproducible output.
-        perfect: If ``True`` produce a perfect (loop-free) maze; if
-            ``False`` a ``braid`` pass may add loops.
-        braid: Fraction in ``[0, 1]`` of closed internal walls to try to
-            open during braiding (only when ``perfect`` is ``False``).
+        perfect: If true, produce a perfect (loop-free) maze.
+        braid: Fraction in ``[0, 1]`` of closed internal walls to open
+            during braiding, used only when ``perfect`` is false.
         blocked: Cells to wall off completely and never traverse.
 
     Raises:
-        ValueError: If any argument is out of range or inconsistent.
+        ValueError: If an argument is out of range or inconsistent.
     """
 
     def __init__(
@@ -59,7 +51,7 @@ class MazeGenerator:
         braid: float = 0.0,
         blocked: Optional[Set[_Cell]] = None,
     ) -> None:
-        """Validate arguments and store generation parameters."""
+        """Validate the arguments and store the generation parameters."""
         if width < 1 or height < 1:
             raise ValueError("width and height must be >= 1")
         blocked_set: Set[_Cell] = set(blocked) if blocked else set()
@@ -86,18 +78,22 @@ class MazeGenerator:
 
     @staticmethod
     def _in_bounds(cell: _Cell, width: int, height: int) -> bool:
-        """Return ``True`` if ``cell`` lies inside a ``width`` x ``height``."""
+        """Return whether ``cell`` lies inside a ``width`` x ``height``."""
         x, y = cell
         return 0 <= x < width and 0 <= y < height
 
     def generate(self) -> Maze:
         """Build, store and return the maze.
 
-        Runs an iterative randomized backtracker over the non-blocked
-        cells starting at ``entry``. Raises
-        :class:`DisconnectedMazeError` if the blocked cells make some
-        non-blocked cell unreachable. When ``perfect`` is ``False`` and
-        ``braid`` is positive, a braiding pass adds extra passages.
+        Runs the backtracker over the non-blocked cells from ``entry``,
+        then braids if requested.
+
+        Returns:
+            The generated maze.
+
+        Raises:
+            DisconnectedMazeError: If blocked cells leave some cell
+                unreachable.
         """
         maze = Maze(self._width, self._height)
         for cell in self._blocked:
@@ -165,11 +161,7 @@ class MazeGenerator:
         return self._maze
 
     def solution(self) -> List[str]:
-        """Return the move letters from ``entry`` to ``exit``.
-
-        The solver is imported lazily to avoid an import cycle between
-        the generator and solver modules.
-        """
-        from mazegen.solver import solve
+        """Return the shortest ``entry`` -> ``exit`` route as move letters."""
+        from mazegen.solver import solve  # lazy: avoids an import cycle
 
         return solve(self.get_structure(), self._entry, self._exit)

@@ -1,14 +1,14 @@
-"""mazegen — a small, dependency-free maze generation library.
+"""mazegen -- a small, dependency-free maze generation library.
 
-Public API::
+Example::
 
-    from mazegen import MazeGenerator, solve, blocked_cells
+    from mazegen import MazeGenerator, blocked_cells
 
-    blocked = blocked_cells(20, 15)          # optional hidden "42"
     gen = MazeGenerator(20, 15, (0, 0), (19, 14),
-                        seed=42, perfect=True, blocked=blocked)
-    maze = gen.generate()                    # -> mazegen.grid.Maze
-    moves = gen.solution()                   # -> ['E', 'S', ...] (N/E/S/W)
+                        seed=42, perfect=True,
+                        blocked=blocked_cells(20, 15))
+    maze = gen.generate()    # -> mazegen.grid.Maze
+    moves = gen.solution()   # -> ['E', 'S', ...]
 
 See ``README.md`` for the full guide.
 """
