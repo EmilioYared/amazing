@@ -117,8 +117,8 @@ def path_cells(maze, entry, exit) -> list[tuple[int,int]]
 
 # mazegen/pattern42.py
 class PatternTooSmallError(Exception): ...
-def min_dimensions(scale=1) -> tuple[int,int]           # (9, 7)
-def blocked_cells(width, height, scale=1) -> set[tuple[int,int]]   # {} if too small
+def min_dimensions() -> tuple[int,int]                  # (9, 7), fixed
+def blocked_cells(width, height) -> set[tuple[int,int]]  # {} if too small
 
 # amaze/config.py
 @dataclass

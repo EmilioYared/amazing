@@ -294,15 +294,16 @@ Each digit is a 3×5 grid of pixels (`1` = a cell to wall off):
 
 ### 5.2 Placement
 
-- `min_dimensions(scale)` → the smallest grid that fits the glyph **plus a
-  one-cell margin on every side** = `(7·scale + 2, 5·scale + 2)`. At the
-  default `scale=1` that's **9×7**.
-- `fits(w, h, scale)` → does the grid clear that minimum?
-- `blocked_cells(w, h, scale)` → the set of `(x, y)` cells to close. The
-  glyph is **centred**, and each font pixel expands to a `scale × scale`
-  block. If the grid is too small, it returns an **empty set** (not an
-  error) so the caller can print the mandated "too small" message and carry
-  on.
+- `min_dimensions()` → the smallest grid that fits the glyph **plus a
+  one-cell margin on every side** = `(7 + 2, 5 + 2)` = **9×7**, a constant.
+- `fits(w, h)` → does the grid clear that minimum?
+- `blocked_cells(w, h)` → the set of `(x, y)` cells to close. The glyph is
+  **centred**, and each font pixel becomes **exactly one cell**. If the grid
+  is too small, it returns an **empty set** (not an error) so the caller can
+  print the mandated "too small" message and carry on.
+
+The glyph is **never scaled to the maze**: a 200×200 maze hides the same
+7×5 "42" as a 9×7 one, just with more margin around it.
 
 The one-cell margin guarantees the pattern never touches the border and
 keeps the default corner entry/exit clear.

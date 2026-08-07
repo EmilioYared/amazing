@@ -144,6 +144,21 @@ def _build_maze(
     return maze, moves
 
 
+def _write(cfg: Config, maze: Maze, moves: List[str]) -> bool:
+    """Write ``maze`` to ``cfg.output_file``; report failure and continue.
+
+    Called for the first maze and again after every regeneration, so the
+    output file always matches what is on screen.
+    """
+    try:
+        write_output(cfg.output_file, maze, cfg.entry, cfg.exit, moves)
+    except OSError as exc:
+        print("error: could not write output: %s" % exc, file=sys.stderr)
+        return False
+    print("maze written to %s" % cfg.output_file)
+    return True
+
+
 def _legend(color: bool) -> str:
     """Return a one-line colour key for the markers."""
     if not color:
@@ -195,6 +210,8 @@ def _interactive(
                 maze, moves = _build_maze(cfg, new_seed, verbose=False)
             except (ValueError, DisconnectedMazeError) as exc:
                 print("error: %s" % exc, file=sys.stderr)
+            else:
+                _write(cfg, maze, moves)
         elif choice == "2":
             show_path = not show_path
         elif choice == "3":
@@ -222,12 +239,8 @@ def main(argv: List[str]) -> int:
         print("error: %s" % exc, file=sys.stderr)
         return 1
 
-    try:
-        write_output(cfg.output_file, maze, cfg.entry, cfg.exit, moves)
-    except OSError as exc:
-        print("error: could not write output: %s" % exc, file=sys.stderr)
+    if not _write(cfg, maze, moves):
         return 1
-    print("maze written to %s" % cfg.output_file)
 
     _enable_windows_ansi()
     _interactive(cfg, cfg.seed, maze, moves)
